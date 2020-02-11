@@ -40,6 +40,9 @@ public final class Retrificator {
   
   public void setIgnoreAppNameRegexps(List<String> ignoreAppNameRegexps) {
     this.ignoreAppNameRegexps = ignoreAppNameRegexps;
+    if (verbose) {
+      logStream.println("VERBOSE: setIgnoreAppNameRegexps: " + ignoreAppNameRegexps);
+    }
   }
   
   public Retrificator(File tomcatWebappsDir, File retrificatorStateFile, boolean verbose, File retrificatorLogFile) {
@@ -69,7 +72,7 @@ public final class Retrificator {
   public void retrifyByAccessAge(File tomcatLogDir, long age) {
     
     if (verbose) {
-      logStream.println("VERBOSE: run retrifyByAccessAge at " + new Date());
+      logStream.println("VERBOSE: run retrifyByAccessAge at " + new Date() + ", age: " + age + " ms");
     }
     
     final RetrificatorState state = getState();
@@ -132,7 +135,7 @@ public final class Retrificator {
         if (latestAccess < threshold) {
           if (ignoredApp(webappName)) {
             if (verbose) {
-              logStream.println("VERBOSE: retrification of the application " + webappName + " skipped because it is in ignore list");
+              logStream.println("VERBOSE: application retrification skipped: " + webappName + " (because it is in ignore list)");
             }
           } else {
             if (retrify(webappFile)) {
@@ -143,13 +146,13 @@ public final class Retrificator {
         } else {
           // do not retrify
           if (verbose) {
-            logStream.println("VERBOSE: retrification of the application " + webappName + " skipped because it has been accessed recently");
+            logStream.println("VERBOSE: application retrification skipped: " + webappName + " (because it has been accessed recently)");
           }
         }
       } else {
         // TODO never retrify apps whose latest access is undefined?
         if (verbose) {
-          logStream.println("VERBOSE: retrification of the application " + webappName + " skipped because its latest access timestamp was not found in logs");
+          logStream.println("VERBOSE: application retrification skipped: " + webappName + " (because its latest access timestamp was not found in logs)");
         }
       }
     }
@@ -198,13 +201,13 @@ public final class Retrificator {
     if (webappFile.renameTo(webappRetroFile)) {
       // success
       if (verbose) {
-        logStream.println("VERBOSE: application retrification by the file " + webappFile + " succeeded");
+        logStream.println("VERBOSE: application retrification succeeded: " + webappFile);
       }
       
       return true;
     } else {
       // failure
-      logStream.println("ERROR: failed to retrify application by the file " + webappFile);
+      logStream.println("VERBOSE: application retrification failed: " + webappFile);
     }
     
     return false;
@@ -221,7 +224,7 @@ public final class Retrificator {
   public void retrifyByDeployAge(long age) {
     
     if (verbose) {
-      logStream.println("VERBOSE: run retrifyByDeployAge at " + new Date());
+      logStream.println("VERBOSE: run retrifyByDeployAge at " + new Date() + ", age: " + age + " ms");
     }
     
     final RetrificatorState state = getState();
@@ -241,7 +244,7 @@ public final class Retrificator {
         
         if (ignoredApp(webappName)) {
           if (verbose) {
-            logStream.println("VERBOSE: retrification of the application " + webappName + " skipped because it is in ignore list");
+            logStream.println("VERBOSE: application retrification skipped: " + webappName + " (because it is in ignore list)");
           }
         } else {
           retrify(webappFile);
@@ -250,7 +253,7 @@ public final class Retrificator {
       } else {
         // do not retrify
         if (verbose) {
-          logStream.println("VERBOSE: retrification of the application " + webappName + " skipped because it is not too old");
+          logStream.println("VERBOSE: application retrification skipped: " + webappName + " (because it is not too old)");
         }
       }
     }
