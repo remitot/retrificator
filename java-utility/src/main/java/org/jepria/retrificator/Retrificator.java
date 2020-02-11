@@ -6,7 +6,6 @@ import java.util.stream.Collectors;
 
 public final class Retrificator {
   
-  private final File tomcatWebappsDir;
   private final File retrificatorStateFile;
   private final boolean verbose;
   
@@ -45,9 +44,8 @@ public final class Retrificator {
     }
   }
   
-  public Retrificator(File tomcatWebappsDir, File retrificatorStateFile, boolean verbose, File retrificatorLogFile) {
+  public Retrificator(File retrificatorStateFile, boolean verbose, File retrificatorLogFile) {
     this.retrificatorStateFile = retrificatorStateFile;
-    this.tomcatWebappsDir = tomcatWebappsDir;
     this.verbose = verbose;
     
     PrintStream logStream;
@@ -65,11 +63,11 @@ public final class Retrificator {
   }
   
   /**
-   * Retrify all apps in {@link #tomcatWebappsDir} which have lateset access timestamp (known from the access log files) older than the age specified
-   * @param tomcatLogDir directory with tomcat access log files
-   * @param age
+   * Retrify all tomcat webapps which have lateset access timestamp (known from the access log files) older than the age specified
+   * @param tomcat
+   * @param age ms
    */
-  public void retrifyByAccessAge(File tomcatLogDir, long age) {
+  public void retrifyByAccessAge(Tomcat tomcat, long age) {
     
     if (verbose) {
       logStream.println("VERBOSE: run retrifyByAccessAge at " + new Date() + ", age: " + age + " ms");
@@ -77,25 +75,26 @@ public final class Retrificator {
     
     final RetrificatorState state = getState();
     
-    Set<String> accessLogFiles = getAccessLogFiles(tomcatLogDir);
+    Collection<File> accessLogs = tomcat.getAccessLogs();
+    Set<String> accessLogFilenames = accessLogs.stream().map(file -> file.getName()).collect(Collectors.toSet());
     
     // remove files processed which are not present anymore (deleted)
     if (verbose) {
       logStream.println("VERBOSE: state.logFilesProcessed before removing deleted log files: " + state.logFilesProcessed);
     }
-    state.logFilesProcessed.retainAll(accessLogFiles);
+    state.logFilesProcessed.retainAll(accessLogFilenames);
     if (verbose) {
       logStream.println("VERBOSE: state.logFilesProcessed after removing deleted log files: " + state.logFilesProcessed);
     }
     
     // process new files
     
-    for (String filename : accessLogFiles) {
-      if (state.logFilesProcessed.add(filename)) {
-        File file = new File(tomcatLogDir, filename);
+    for (File accessLog : accessLogs) {
+      final String accessLogFilename = accessLog.getName();
+      if (state.logFilesProcessed.add(accessLogFilename)) {
         List<AccessLogReader.Record> records = new ArrayList<>();
         
-        try (Scanner sc = new Scanner(file)) {
+        try (Scanner sc = new Scanner(accessLog)) {
           while (sc.hasNextLine()) {
             String line = sc.nextLine();
             try {
@@ -124,45 +123,42 @@ public final class Retrificator {
     final long now = System.currentTimeMillis();
     final long threshold = now - age;
     
-    Set<String> webappWars = getWebappWars();
+    Collection<Webapp> webapps = tomcat.getWebapps();
     
-    for (String webapp : webappWars) {
-      String webappName = webapp.substring(0, webapp.length() - ".war".length());
-      
-      File webappFile = new File(tomcatWebappsDir, webapp);
-      Long latestAccess = state.latestAccessMap.get(webappName);
+    for (Webapp webapp : webapps) {
+      Long latestAccess = state.latestAccessMap.get(webapp.name);
       if (latestAccess != null) {
         if (latestAccess < threshold) {
-          if (ignoredApp(webappName)) {
+          if (ignoredApp(webapp.name)) {
             if (verbose) {
-              logStream.println("VERBOSE: application retrification skipped: " + webappName + " (because it is in ignore list)");
+              logStream.println("VERBOSE: application retrification skipped: " + webapp + " (because it is in ignore list)");
             }
           } else {
-            if (retrify(webappFile)) {
-              state.latestAccessMap.remove(webappName);
+            if (retrify(webapp.war)) {
+              state.latestAccessMap.remove(webapp.name);
             }
           }
           
         } else {
           // do not retrify
           if (verbose) {
-            logStream.println("VERBOSE: application retrification skipped: " + webappName + " (because it has been accessed recently)");
+            logStream.println("VERBOSE: application retrification skipped: " + webapp + " (because it has been accessed recently)");
           }
         }
       } else {
         // TODO never retrify apps whose latest access is undefined?
         if (verbose) {
-          logStream.println("VERBOSE: application retrification skipped: " + webappName + " (because its latest access timestamp was not found in logs)");
+          logStream.println("VERBOSE: application retrification skipped: " + webapp + " (because its latest access timestamp was not found in logs)");
         }
       }
     }
     
     // remove webapps registered which are not present anymore (undeployed)
-    Set<String> webappKeys = webappWars.stream().map(war -> war.substring(0, war.length() - ".war".length())).collect(Collectors.toSet());
+    Set<String> webappNames = webapps.stream().map(webapp -> webapp.name).collect(Collectors.toSet());
     if (verbose) {
       logStream.println("VERBOSE: state.latestAccessMap keys before removing undeployed webapps: " + state.latestAccessMap.keySet());
     }
-    state.latestAccessMap.keySet().retainAll(webappKeys);
+    state.latestAccessMap.keySet().retainAll(webappNames);
     if (verbose) {
       logStream.println("VERBOSE: state.latestAccessMap keys after removing undeployed webapps: " + state.latestAccessMap.keySet());
     }
@@ -218,10 +214,11 @@ public final class Retrificator {
   }
   
   /**
-   * Retrify all apps in {@link #tomcatWebappsDir} which have deploy timestamp ({@link File#lastModified()}) older than the age specified
-   * @param age
+   * Retrify all tomcat apps which have deploy timestamp ({@link File#lastModified()}) older than the age specified
+   * @param tomcat
+   * @param age ms
    */
-  public void retrifyByDeployAge(long age) {
+  public void retrifyByDeployAge(Tomcat tomcat, long age) {
     
     if (verbose) {
       logStream.println("VERBOSE: run retrifyByDeployAge at " + new Date() + ", age: " + age + " ms");
@@ -233,37 +230,34 @@ public final class Retrificator {
     final long now = System.currentTimeMillis();
     final long threshold = now - age;
     
-    Set<String> webappWars = getWebappWars();
+    Collection<Webapp> webapps = tomcat.getWebapps();
     
-    for (String webapp : webappWars) {
-      String webappName = webapp.substring(0, webapp.length() - ".war".length());
-      
-      File webappFile = new File(tomcatWebappsDir, webapp);
-      long deploy = webappFile.lastModified();
+    for (Webapp webapp : webapps) {
+      long deploy = webapp.war.lastModified();
       if (deploy < threshold) {
         
-        if (ignoredApp(webappName)) {
+        if (ignoredApp(webapp.name)) {
           if (verbose) {
-            logStream.println("VERBOSE: application retrification skipped: " + webappName + " (because it is in ignore list)");
+            logStream.println("VERBOSE: application retrification skipped: " + webapp + " (because it is in ignore list)");
           }
         } else {
-          retrify(webappFile);
+          retrify(webapp.war);
         }
         
       } else {
         // do not retrify
         if (verbose) {
-          logStream.println("VERBOSE: application retrification skipped: " + webappName + " (because it is not too old)");
+          logStream.println("VERBOSE: application retrification skipped: " + webapp + " (because it is not too old)");
         }
       }
     }
     
     // remove webapps registered which are not present anymore (undeployed)
-    Set<String> webappKeys = webappWars.stream().map(war -> war.substring(0, war.length() - ".war".length())).collect(Collectors.toSet());
+    Set<String> webappNames = webapps.stream().map(webapp -> webapp.name).collect(Collectors.toSet());
     if (verbose) {
       logStream.println("VERBOSE: state.latestAccessMap keys before removing undeployed webapps: " + state.latestAccessMap.keySet());
     }
-    state.latestAccessMap.keySet().retainAll(webappKeys);
+    state.latestAccessMap.keySet().retainAll(webappNames);
     if (verbose) {
       logStream.println("VERBOSE: state.latestAccessMap keys after removing undeployed webapps: " + state.latestAccessMap.keySet());
     }
@@ -283,37 +277,6 @@ public final class Retrificator {
         map.put(key, value);
       }
     }
-  }
-  
-  private Set<String> getAccessLogFiles(File tomcatLogDir) {
-    File[] files = tomcatLogDir.listFiles(file -> file.isFile() && file.getName().contains("_access_log."));
-    final Set<String> filenames = new LinkedHashSet<>();
-    if (files != null) {
-      for (File file : files) {
-        filenames.add(file.getName());
-      }
-    }
-    return filenames;
-  }
-  
-  private Set<String> getWebappWars() {
-    File[] files = tomcatWebappsDir.listFiles(file -> {
-      if (!file.isFile()) {
-        return false;
-      }
-      String filename = file.getName();
-      if (filename.length() >= ".war".length() && filename.substring(filename.length() - ".war".length()).equalsIgnoreCase(".war")) {
-        return true;
-      }
-      return false;
-    });
-    final Set<String> filenames = new LinkedHashSet<>();
-    if (files != null) {
-      for (File file : files) {
-        filenames.add(file.getName());
-      }
-    }
-    return filenames;
   }
   
   /**

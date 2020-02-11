@@ -96,19 +96,19 @@ public class CLI {
       throw new IllegalStateException("Retrificator root directory not specified. Use '--retrificator-root' ('-r') option");
     }
 
-    File tomcatLogsDirInternal = new File(tomcatRoot, "logs");
-    File tomcatWebappsDirInternal = new File(tomcatRoot, "webapps");
-
     File retrificatorStateFileInternal = new File(retrificatorRoot, "retrificator-state.json");
     File retrificatorLogFileInternal = new File(retrificatorRoot, "retrificator-log.txt");
 
     File retrificatorIgnoreAppsFileInternal = new File(retrificatorRoot, "ignore-apps.txt");
     List<String> ignoreAppNameRegexps = readIgnoreApps(retrificatorIgnoreAppsFileInternal);
-
-    Retrificator r = new Retrificator(tomcatWebappsDirInternal, retrificatorStateFileInternal, verbose, retrificatorLogFileInternal);
+  
+    Tomcat tomcat = new TomcatImpl(tomcatRoot);
+    
+    
+    Retrificator r = new Retrificator(retrificatorStateFileInternal, verbose, retrificatorLogFileInternal);
     r.setIgnoreAppNameRegexps(ignoreAppNameRegexps);
-    r.retrifyByAccessAge(tomcatLogsDirInternal, accessAge);
-    r.retrifyByDeployAge(deployAge);
+    r.retrifyByAccessAge(tomcat, accessAge);
+    r.retrifyByDeployAge(tomcat, deployAge);
 
   }
 
