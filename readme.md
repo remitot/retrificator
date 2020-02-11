@@ -2,7 +2,7 @@ At the moment there is only a java command-line tool which runs manually.
 Further plans are about binding the tool to the system service etc. to run automatically (periodically).
 
 ### java-utility
-Contains java API and builds to an executable command-line tool that executes a single retrification iteration over all webapps on a Tomcat instance.
+Contains java API and builds to an executable command-line tool to perform a single retrification iteration on a Tomcat instance.
 
 ##### Example CLI usage:
 `java -jar C:\apache-tomcat-7.0.68\retrificator\retrificator-1.0.0.jar -t C:\apache-tomcat-7.0.68 -r C:\apache-tomcat-7.0.68\retrificator -v`
