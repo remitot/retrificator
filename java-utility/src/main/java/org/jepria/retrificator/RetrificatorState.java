@@ -8,12 +8,12 @@ import java.util.*;
 
 public class RetrificatorState {
   /**
-   * Set of tomcat log filenames which had already been processed and should further be ignored
+   * Set of tomcat access log filenames which had already been processed and should further be ignored
    */
-  public final Set<String> logFilesProcessed = new HashSet<>();
+  public final Set<String> accessLogsProcessed = new HashSet<>();
 
   /**
-   * Key: application context path (starts with a single '/'); value: last access timestamp
+   * Key: application context path (starts with a single '/'); value: latest application access timestamp
    */
   public final Map<String, Long> latestAccessMap = new HashMap<>();
 
@@ -49,7 +49,7 @@ public class RetrificatorState {
         RetrificatorState state = new RetrificatorState();
         {
           if (dto.logFilesProcessed != null) {
-            state.logFilesProcessed.addAll(dto.logFilesProcessed);
+            state.accessLogsProcessed.addAll(dto.logFilesProcessed);
           }
           if (dto.latestAccessMap != null) {
             state.latestAccessMap.putAll(dto.latestAccessMap);
@@ -66,7 +66,7 @@ public class RetrificatorState {
   public static void serialize(RetrificatorState state, Writer json) {
 
     StateDto dto = new StateDto();
-    dto.logFilesProcessed = state.logFilesProcessed;
+    dto.logFilesProcessed = state.accessLogsProcessed;
     dto.latestAccessMap = state.latestAccessMap;
 
     new Gson().toJson(dto, json);

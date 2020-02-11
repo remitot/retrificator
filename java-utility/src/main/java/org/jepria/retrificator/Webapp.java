@@ -1,6 +1,7 @@
 package org.jepria.retrificator;
 
 import java.io.File;
+import java.util.Objects;
 
 public class Webapp {
   /**
@@ -21,7 +22,15 @@ public class Webapp {
    */
   public final File deployed;
   
+  /**
+   *
+   * @param name NotNulll
+   * @param war
+   * @param warRetro
+   * @param deployed
+   */
   public Webapp(String name, File war, File warRetro, File deployed) {
+    Objects.requireNonNull(name);
     this.name = name;
     this.war = war;
     this.warRetro = warRetro;

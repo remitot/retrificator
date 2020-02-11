@@ -80,18 +80,18 @@ public final class Retrificator {
     
     // remove files processed which are not present anymore (deleted)
     if (verbose) {
-      logStream.println("VERBOSE: state.logFilesProcessed before removing deleted log files: " + state.logFilesProcessed);
+      logStream.println("VERBOSE: state.logFilesProcessed before removing deleted log files: " + state.accessLogsProcessed);
     }
-    state.logFilesProcessed.retainAll(accessLogFilenames);
+    state.accessLogsProcessed.retainAll(accessLogFilenames);
     if (verbose) {
-      logStream.println("VERBOSE: state.logFilesProcessed after removing deleted log files: " + state.logFilesProcessed);
+      logStream.println("VERBOSE: state.logFilesProcessed after removing deleted log files: " + state.accessLogsProcessed);
     }
     
     // process new files
     
     for (File accessLog : accessLogs) {
       final String accessLogFilename = accessLog.getName();
-      if (state.logFilesProcessed.add(accessLogFilename)) {
+      if (state.accessLogsProcessed.add(accessLogFilename)) {
         List<AccessLogReader.Record> records = new ArrayList<>();
         
         try (Scanner sc = new Scanner(accessLog)) {
@@ -131,10 +131,11 @@ public final class Retrificator {
         if (latestAccess < threshold) {
           if (ignoredApp(webapp.name)) {
             if (verbose) {
-              logStream.println("VERBOSE: application retrification skipped: " + webapp + " (because it is in ignore list)");
+              logStream.println("VERBOSE: application retrification skipped: " + webapp.name + " (because it is in ignore list)");
             }
           } else {
-            if (retrify(webapp.war)) {
+            // retrify
+            if (retrify(webapp)) {
               state.latestAccessMap.remove(webapp.name);
             }
           }
@@ -142,13 +143,13 @@ public final class Retrificator {
         } else {
           // do not retrify
           if (verbose) {
-            logStream.println("VERBOSE: application retrification skipped: " + webapp + " (because it has been accessed recently)");
+            logStream.println("VERBOSE: application retrification skipped: " + webapp.name + " (the application has been accessed recently)");
           }
         }
       } else {
         // TODO never retrify apps whose latest access is undefined?
         if (verbose) {
-          logStream.println("VERBOSE: application retrification skipped: " + webapp + " (because its latest access timestamp was not found in logs)");
+          logStream.println("VERBOSE: application retrification skipped: " + webapp.name + " (the application latest access timestamp was not found in logs)");
         }
       }
     }
@@ -173,40 +174,56 @@ public final class Retrificator {
   
   /**
    * Retrify particular webapp
-   * @param webappFile application war file
+   * @param webapp
    * @return
    */
-  protected boolean retrify(File webappFile) {
+  protected boolean retrify(Webapp webapp) {
     // retrify application
     
-    // assert webappFile exists
-    if (!webappFile.exists()) {
-      throw new IllegalStateException("The file " + webappFile + " expected to exist, but it is not");
-    }
-    
-    File webappRetroFile = new File(webappFile.getAbsolutePath() + ".retro");
-    
-    if (webappRetroFile.exists()) {
-      // delete the existing .war.retro file before retrifying the actual (alive) .war file
-      if (!webappRetroFile.delete()) {
-        // failure
-        logStream.println("ERROR: failed to delete the existing retrified application by the file " + webappRetroFile);
-      }
-    }
-    
-    if (webappFile.renameTo(webappRetroFile)) {
-      // success
-      if (verbose) {
-        logStream.println("VERBOSE: application retrification succeeded: " + webappFile);
-      }
+    if (webapp == null) {
+      return false;
       
-      return true;
     } else {
-      // failure
-      logStream.println("VERBOSE: application retrification failed: " + webappFile);
-    }
+      if (webapp.war == null || !webapp.war.exists()) {
+        if (verbose) {
+          logStream.println("VERBOSE: application retrification failed: " + webapp.name + " (the application war file could not be found)");
+        }
+        return false;
+        
+      } else {
+  
+        final File webappRetroFile;
+        
+        if (webapp.warRetro != null) {
+          webappRetroFile = webapp.warRetro;
+        } else {
+          webappRetroFile = new File(webapp.war.getAbsolutePath() + ".retro");
+        }
+        
+        
+        if (webappRetroFile.exists()) {
+          // delete the existing .war.retro file before retrifying the actual (alive) .war file
+          if (!webappRetroFile.delete()) {
+            // failure
+            logStream.println("WARNING: failed to delete the existing retrified application by the file " + webappRetroFile + ", will try to overwrite it");
+          }
+        }
+        
+        if (webapp.war.renameTo(webappRetroFile)) {
+          // success
+          if (verbose) {
+            logStream.println("VERBOSE: application retrification succeeded: " + webapp.name);
+          }
     
-    return false;
+          return true;
+        } else {
+          // failure
+          logStream.println("ERROR: application retrification failed: " + webapp.name + " (failed to rename the file " + webapp.war + " to " + webappRetroFile + ")");
+        }
+  
+        return false;
+      }
+    }
   }
   
   protected boolean ignoredApp(String webappName) {
@@ -233,21 +250,27 @@ public final class Retrificator {
     Collection<Webapp> webapps = tomcat.getWebapps();
     
     for (Webapp webapp : webapps) {
-      long deploy = webapp.war.lastModified();
-      if (deploy < threshold) {
-        
-        if (ignoredApp(webapp.name)) {
-          if (verbose) {
-            logStream.println("VERBOSE: application retrification skipped: " + webapp + " (because it is in ignore list)");
+      if (webapp.war != null) {
+        long deploy = webapp.war.lastModified();
+        if (deploy < threshold) {
+  
+          if (ignoredApp(webapp.name)) {
+            if (verbose) {
+              logStream.println("VERBOSE: application retrification skipped: " + webapp.name + " (the application is in ignore list)");
+            }
+          } else {
+            retrify(webapp);
           }
+  
         } else {
-          retrify(webapp.war);
+          // do not retrify
+          if (verbose) {
+            logStream.println("VERBOSE: application retrification skipped: " + webapp.name + " (the application is not old enough)");
+          }
         }
-        
       } else {
-        // do not retrify
         if (verbose) {
-          logStream.println("VERBOSE: application retrification skipped: " + webapp + " (because it is not too old)");
+          logStream.println("VERBOSE: could not determine whether or not to retrify the application " + webapp.name);
         }
       }
     }
