@@ -103,30 +103,34 @@ public class CLI {
     File retrificatorLogFileInternal = new File(retrificatorRoot, "retrificator-log.txt");
 
     File retrificatorIgnoreAppsFileInternal = new File(retrificatorRoot, "ignore-apps.txt");
-    List<String> ignoreAppNameRegexps = null;
-    {
-      if (retrificatorIgnoreAppsFileInternal.exists()) {
-        ignoreAppNameRegexps = new ArrayList<>();
-        try (Scanner sc = new Scanner(retrificatorIgnoreAppsFileInternal)) {
-          while (sc.hasNextLine()) {
-            String s = sc.nextLine();
-            if (s != null) {
-              String ignoreAppName = s.trim();
-              if (!"".equals(ignoreAppName)) {
-                ignoreAppNameRegexps.add(ignoreAppName);
-              }
-            }
-          }
-        } catch (FileNotFoundException e) {
-          throw new RuntimeException(e); // impossible
-        }
-      }
-    }
+    List<String> ignoreAppNameRegexps = readIgnoreApps(retrificatorIgnoreAppsFileInternal);
 
     Retrificator r = new Retrificator(tomcatWebappsDirInternal, retrificatorStateFileInternal, verbose, retrificatorLogFileInternal);
     r.setIgnoreAppNameRegexps(ignoreAppNameRegexps);
     r.retrifyByAccessAge(tomcatLogsDirInternal, accessAge);
     r.retrifyByDeployAge(deployAge);
 
+  }
+
+  protected static List<String> readIgnoreApps(File file) {
+    final List<String> ignoreAppNameRegexps = new ArrayList<>();
+
+    if (file.exists()) {
+      try (Scanner sc = new Scanner(file)) {
+        while (sc.hasNextLine()) {
+          String s = sc.nextLine();
+          if (s != null) {
+            String sTrim = s.trim();
+            if (!"".equals(sTrim) && !sTrim.startsWith("#")) {
+              ignoreAppNameRegexps.add(sTrim);
+            }
+          }
+        }
+      } catch (FileNotFoundException e) {
+        throw new RuntimeException(e); // impossible
+      }
+    }
+
+    return ignoreAppNameRegexps;
   }
 }
