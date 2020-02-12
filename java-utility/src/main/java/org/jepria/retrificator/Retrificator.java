@@ -41,7 +41,7 @@ public final class Retrificator {
    * @param json
    * @return instance deserialized from json or new instance if the input is null or empty
    */
-  protected static State deserializeState(Reader json) {
+  private static State deserializeState(Reader json) {
     if (json != null) {
       final String content;
       {
@@ -75,7 +75,7 @@ public final class Retrificator {
     return new State();
   }
   
-  public static void serializeState(State state, Writer json) {
+  private static void serializeState(State state, Writer json) {
     
     StateDto dto = new StateDto();
     dto.logFilesProcessed = state.accessLogsProcessed;
