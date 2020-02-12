@@ -9,11 +9,11 @@ import java.util.Scanner;
 /**
  * CLI options:
  * <pre>
- * -v --verbose [true|false|<empty defaults to false>]: whether to log everything or just errors
+ * -v --verbose: whether to log everything or just errors
  * -t --tomcat-root [<absolute directory path>]: tomcat root (home) directory
  * -r --retrificator-root [<absolute directory path>]: retrificator root directory
- * -a --access-age [<long>]: latest access age in milliseconds, for the apps to be retrified
- * -d --deploy-age [<long>]: latest deploy age in milliseconds, for the apps to be retrified
+ * -a --access-age [<long>]: latest access age in milliseconds, for the apps to be retrified. Default 14400 (10 days)
+ * -d --deploy-age [<long>]: latest deploy age in milliseconds, for the apps to be retrified. Default 43200 (30 days)
  * </pre>
  */
 public class CLI {
@@ -23,8 +23,8 @@ public class CLI {
     boolean verbose = false;
     File retrificatorRoot = null;
 
-    long accessAge = 48 * 60 * 60 * 1000L; // 48 hours
-    long deployAge = 30 * 24 * 60 * 60 * 1000L; // 30 days
+    int accessAgeMins = 14400; // 10 days
+    int deployAgeMins = 43200; // 30 days
 
     for (int i = 0; i < args.length; i++) {
       String arg = args[i];
@@ -37,22 +37,7 @@ public class CLI {
         tomcatRoot = new File(val);
 
       } else if ("-v".equals(arg) || "--verbose".equals(arg)) {
-        // peek next argument
-        if (i == args.length - 1) {
-          verbose = true;
-        } else {
-          String nextArg = args[i + 1];
-          if (!nextArg.startsWith("-")) {
-            i++; // consume next argument
-            if ("true".equalsIgnoreCase(nextArg)) {
-              verbose = true;
-            } else if ("false".equalsIgnoreCase(nextArg)) {
-              verbose = false;
-            } else {
-              throw new IllegalArgumentException("Illegal value '" + nextArg + "' for the '" + arg + "' argument");
-            }
-          }
-        }
+        verbose = true;
       } else if ("-r".equals(arg) || "--retrificator-root".equals(arg)) {
         i++;
         if (i >= args.length) {
@@ -68,9 +53,12 @@ public class CLI {
         }
         String val = args[i];
         try {
-          accessAge = Long.parseLong(val);
+          accessAgeMins = Integer.parseInt(val);
         } catch (NumberFormatException e) {
-          throw new IllegalArgumentException("Failed to parse the value '" + val + "' as long", e);
+          throw new IllegalArgumentException("Failed to parse the value '" + val + "' as integer", e);
+        }
+        if (accessAgeMins <= 0) {
+          throw new IllegalArgumentException("Illegal value '" + val + "': positive integer allowed");
         }
       } else if ("-d".equals(arg) || "--deploy-age".equals(arg)) {
         i++;
@@ -79,9 +67,12 @@ public class CLI {
         }
         String val = args[i];
         try {
-          deployAge = Long.parseLong(val);
+          deployAgeMins = Integer.parseInt(val);
         } catch (NumberFormatException e) {
-          throw new IllegalArgumentException("Failed to parse the value '" + val + "' as long", e);
+          throw new IllegalArgumentException("Failed to parse the value '" + val + "' as integer", e);
+        }
+        if (deployAgeMins <= 0) {
+          throw new IllegalArgumentException("Illegal value '" + val + "': positive integer allowed");
         }
       }
 
@@ -96,20 +87,23 @@ public class CLI {
       throw new IllegalStateException("Retrificator root directory not specified. Use '--retrificator-root' ('-r') option");
     }
 
-    File tomcatLogsDirInternal = new File(tomcatRoot, "logs");
-    File tomcatWebappsDirInternal = new File(tomcatRoot, "webapps");
-
     File retrificatorStateFileInternal = new File(retrificatorRoot, "retrificator-state.json");
     File retrificatorLogFileInternal = new File(retrificatorRoot, "retrificator-log.txt");
 
     File retrificatorIgnoreAppsFileInternal = new File(retrificatorRoot, "ignore-apps.txt");
     List<String> ignoreAppNameRegexps = readIgnoreApps(retrificatorIgnoreAppsFileInternal);
-
-    Retrificator r = new Retrificator(tomcatWebappsDirInternal, retrificatorStateFileInternal, verbose, retrificatorLogFileInternal);
+  
+    Tomcat tomcat = new TomcatImpl(tomcatRoot);
+    
+    
+    Retrificator r = new Retrificator(tomcat, retrificatorStateFileInternal, verbose, retrificatorLogFileInternal);
     r.setIgnoreAppNameRegexps(ignoreAppNameRegexps);
-    r.retrifyByAccessAge(tomcatLogsDirInternal, accessAge);
-    r.retrifyByDeployAge(deployAge);
-
+    r.warnUnboundWebapps();
+    Retrificator.Strategy strategy = Retrificator.Strategy.newBuilder()
+            .byAccessAge(accessAgeMins * 60 * 1000L)
+            .byDeployAge(deployAgeMins * 60 * 1000L)
+            .create();
+    r.retrify(strategy);
   }
 
   protected static List<String> readIgnoreApps(File file) {
