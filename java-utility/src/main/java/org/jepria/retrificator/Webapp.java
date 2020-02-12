@@ -15,7 +15,7 @@ public class Webapp {
   /**
    * Nullable
    */
-  public final File warRetro;
+  public final File retroWar;
   /**
    * Nullable
    * directory of the deployed webapp
@@ -26,14 +26,14 @@ public class Webapp {
    *
    * @param name NotNulll
    * @param war
-   * @param warRetro
+   * @param retroWar
    * @param deployed
    */
-  public Webapp(String name, File war, File warRetro, File deployed) {
+  public Webapp(String name, File war, File retroWar, File deployed) {
     Objects.requireNonNull(name);
     this.name = name;
     this.war = war;
-    this.warRetro = warRetro;
+    this.retroWar = retroWar;
     this.deployed = deployed;
   }
 }
